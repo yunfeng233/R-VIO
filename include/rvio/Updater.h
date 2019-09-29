@@ -23,7 +23,6 @@
 
 #include <list>
 #include <vector>
-#include <string>
 
 #include <Eigen/Core>
 
@@ -39,10 +38,10 @@ class Updater
 {
 public:
 
-    Updater(const std::string& strSettingsFile);
+    Updater(const cv::FileStorage& fsSettings);
 
-    void update(Eigen::VectorXd& xk1k, Eigen::MatrixXd& Pk1k, std::vector<char>& pvFeatTypesForUpdate,
-                std::vector<std::list<cv::Point2f> >& pvlFeatMeasForUpdate);
+    void update(Eigen::VectorXd& xk1k, Eigen::MatrixXd& Pk1k, std::vector<unsigned char>& vFeatTypesForUpdate,
+                std::vector<std::list<cv::Point2f> >& vlFeatMeasForUpdate);
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 

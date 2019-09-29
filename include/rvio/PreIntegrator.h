@@ -22,7 +22,6 @@
 #define PREINTEGRATOR_H
 
 #include <list>
-#include <string>
 
 #include <Eigen/Core>
 
@@ -36,9 +35,9 @@ class PreIntegrator
 {
 public:
 
-    PreIntegrator(const std::string& strSettingsFile);
+    PreIntegrator(const cv::FileStorage& fsSettings);
 
-    void propagate(Eigen::VectorXd& xkk, Eigen::MatrixXd& Pkk, std::list<ImuData*>& plImuData);
+    void propagate(Eigen::VectorXd& xkk, Eigen::MatrixXd& Pkk, std::list<ImuData*>& lImuData);
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 

@@ -25,12 +25,14 @@
 
 #include <Eigen/Core>
 
+#include "SensorDatabase.h"
+
 
 namespace RVIO
 {
 
 /**
- * The 2-Point RANSAC model
+ * 2-Point RANSAC model
  *
  * @do @p nIterations (min. 16) trials to find the best hypothesis (of essential matrix).
  * @all the hypotheses (of essential matrix E) are stored in @p hypotheses.
@@ -60,23 +62,28 @@ class Ransac
 {
 public:
 
-    Ransac(bool bUseSampson, const double nInlierThreshold);
+    Ransac(const cv::FileStorage& fsSettings);
 
     /**
-     * @create a random set of 2-point indices for RANSAC.
-     * @the current trial's number is stored in @p nIterNum.
-     * @the number of inliers found by tracking is @p nInlierCandidates.
+     * @create a set of random 2-point indices for RANSAC.
+     * @the number of inliers is @p nInlierCandidates.
+     * @the number of iterations needed is @p nIterations.
      */
-    void SetPointSet(const int nInlierCandidates, const int nIterNum);
+    void SetPointSet(const int nInlierCandidates, const int nIterations);
 
     /**
      * @use two (normalized) correspondences point(i)(j), where seq i=(A,B) and
      *  reference frame j = (1,2).
-     * @use @p R to pre-rotate the points in frame 1 to frame 2.
-     * @compute essential matrix by only solving a problem of pure translation.
+     * @use @p R to rotate the points in frame 1 to frame 0 having the same orientation as frame 2.
+     * @compute essential matrix by solving a problem with unknow translation only, (p2^T)[tx]p0=0.
      */
     void SetRansacModel(const Eigen::MatrixXd& Points1, const Eigen::MatrixXd& Points2,
                         const Eigen::Matrix3d& R, const int nIterNum);
+
+    /**
+     * @get rotation matrix @p R by integrating the IMU (gyro) measurements.
+     */
+    void GetRotation(std::list<ImuData*>& lImuData, Eigen::Matrix3d& R);
 
     /**
      * @count the number of inliers in the @nIterNum-th trial.
@@ -85,7 +92,7 @@ public:
                       const int nIterNum);
 
     /**
-     * 2-Point RANSAC
+     * 2-Point RANSAC 
      *
      * @the two sets used are @p Points1 and @p Points2.
      * @the original inlier flag vector @p vInlierFlag is obtained from the tracking,
@@ -93,7 +100,7 @@ public:
      * @the output is the refined flag vector @p vInlierFlag.
      */
     int FindInliers(const Eigen::MatrixXd& Points1, const Eigen::MatrixXd& Points2,
-                    const Eigen::Matrix3d& R, std::vector<unsigned char>& vInlierFlag);
+                    std::list<ImuData*>& lImuData, std::vector<unsigned char>& vInlierFlag);
 
     /**
      * Metric for evaluation
@@ -111,6 +118,12 @@ private:
     bool mbUseSampson;
 
     double mnInlierThreshold;
+
+    double mnSmallAngle;
+
+    // Extrinsics
+    Eigen::Matrix3d mRci;
+    Eigen::Matrix3d mRic;
 
     RansacModel mRansacModel;
 

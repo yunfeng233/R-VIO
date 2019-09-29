@@ -27,11 +27,8 @@
 namespace RVIO
 {
 
-PreIntegrator::PreIntegrator(const std::string& strSettingsFile)
+PreIntegrator::PreIntegrator(const cv::FileStorage& fsSettings)
 {
-    // Read settings file
-    cv::FileStorage fsSettings(strSettingsFile, cv::FileStorage::READ);
-
     msigmaGyroNoise = fsSettings["IMU.sigma_g"];
     msigmaGyroBias = fsSettings["IMU.sigma_wg"];
     msigmaAccelNoise = fsSettings["IMU.sigma_a"];
@@ -54,7 +51,7 @@ PreIntegrator::PreIntegrator(const std::string& strSettingsFile)
 
 void PreIntegrator::propagate(Eigen::VectorXd& xkk,
                               Eigen::MatrixXd& Pkk,
-                              std::list<ImuData*>& plImuData)
+                              std::list<ImuData*>& lImuData)
 {
     Eigen::Vector3d gk = xkk.block(7,0,3,1);  // unit vector
     Eigen::Vector4d qk = xkk.block(10,0,4,1); // [0,0,0,1]
@@ -64,7 +61,7 @@ void PreIntegrator::propagate(Eigen::VectorXd& xkk,
     Eigen::Vector3d ba = xkk.block(23,0,3,1);
 
     // Gravity vector in {R}
-    Eigen::Vector3d gR = mnGravity*gk;
+    Eigen::Vector3d gR = gk;
 
     // Local velocity in {R}
     Eigen::Vector3d vR = vk;
@@ -98,8 +95,8 @@ void PreIntegrator::propagate(Eigen::VectorXd& xkk,
 
     double Dt = 0;
 
-    for (std::list<ImuData*>::const_iterator lit=plImuData.begin();
-         lit!=plImuData.end(); ++lit)
+    for (std::list<ImuData*>::const_iterator lit=lImuData.begin();
+         lit!=lImuData.end(); ++lit)
     {
         Eigen::Vector3d wm = (*lit)->AngularVel;
         Eigen::Vector3d am = (*lit)->LinearAccel;
@@ -129,7 +126,7 @@ void PreIntegrator::propagate(Eigen::VectorXd& xkk,
         F.block<3,3>(12,9) = -Rk_T*vx;
         F.block<3,3>(12,15) = Rk_T;
         F.block<3,3>(15,6) = -mnGravity*Rk;
-        F.block<3,3>(15,9) = -SkewSymm(gk);
+        F.block<3,3>(15,9) = -mnGravity*SkewSymm(gk);
         F.block<3,3>(15,15) = -wx;
         F.block<3,3>(15,18) = -vx;
         F.block<3,3>(15,21) = -I;
@@ -176,9 +173,10 @@ void PreIntegrator::propagate(Eigen::VectorXd& xkk,
         dp += Rk_T*(.5*pow(dt,2)*I+f1*wx+f2*wx2)*a;
         dv += Rk_T*(dt*I+f3*wx+f4*wx2)*a;
 
-        pk = vR*Dt-.5*gR*pow(Dt,2)+dp;
-        vk = Rk*(vR-gR*Dt+dv);
+        pk = vR*Dt-.5*mnGravity*gR*pow(Dt,2)+dp;
+        vk = Rk*(vR-mnGravity*gR*Dt+dv);
         gk = Rk*gR;
+        gk.normalize();
     }
 
     xk1k = xkk;

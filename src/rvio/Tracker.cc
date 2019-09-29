@@ -21,9 +21,6 @@
 #include <algorithm> // std::copy
 #include <iterator> // std::back_inserter
 
-#include <Eigen/Core>
-
-#include <opencv2/core/eigen.hpp>
 #include <opencv2/video/tracking.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
@@ -41,14 +38,8 @@ CvScalar red = CV_RGB(255,64,64);
 CvScalar green = CV_RGB(64,255,64);
 CvScalar blue = CV_RGB(64,64,255);
 
-Tracker::Tracker(const std::string& strSettingsFile)
+Tracker::Tracker(const cv::FileStorage& fsSettings)
 {
-    // Read settings file
-    cv::FileStorage fsSettings(strSettingsFile, cv::FileStorage::READ);
-
-    const int nImageWidth = fsSettings["Camera.width"];
-    const int nImageHeight = fsSettings["Camera.height"];
-
     const float fx = fsSettings["Camera.fx"];
     const float fy = fsSettings["Camera.fy"];
     const float cx = fsSettings["Camera.cx"];
@@ -74,17 +65,6 @@ Tracker::Tracker(const std::string& strSettingsFile)
     }
     DistCoef.copyTo(mDistCoef);
 
-    cv::Mat T(4,4,CV_32F);
-    fsSettings["Camera.T_BC0"] >> T;
-    Eigen::Matrix4d Tic;
-    cv::cv2eigen(T,Tic);
-    mRic = Tic.block<3,3>(0,0);
-    mtic = Tic.block<3,1>(0,3);
-    mRci = mRic.transpose();
-    mtci = -mRci*mtic;
-
-    mnSmallAngle = fsSettings["IMU.nSmallAngle"];
-
     const int bIsRGB = fsSettings["Camera.RGB"];
     mbIsRGB = bIsRGB;
 
@@ -95,29 +75,23 @@ Tracker::Tracker(const std::string& strSettingsFile)
     mbEnableEqualizer = bEnableEqualizer;
 
     mnMaxFeatsPerImage = fsSettings["Tracker.nFeatures"];
-    mnMaxFeatsForUpdate = std::ceil(0.5*mnMaxFeatsPerImage);
+    mnMaxFeatsForUpdate = std::ceil(.5*mnMaxFeatsPerImage);
 
     mvlTrackingHistory.resize(mnMaxFeatsPerImage);
 
     mnMaxTrackingLength = fsSettings["Tracker.nMaxTrackingLength"];
     mnMinTrackingLength = fsSettings["Tracker.nMinTrackingLength"];
 
-    const double nQualLvl = fsSettings["Tracker.nQualLvl"];
-    const double nMinDist = fsSettings["Tracker.nMinDist"];
-    const double nGridSize = fsSettings["Tracker.nGridSize"];
-    mpCornerDetector = new CornerDetector(nImageHeight, nImageWidth, nQualLvl, nMinDist);
-    mpCornerCluster = new CornerCluster(nImageHeight, nImageWidth, nGridSize);
-
-    const int bUseSampson = fsSettings["Tracker.UseSampson"];
-    const double nInlierThreshold = fsSettings["Tracker.nSampsonThrd"];
-    mpRansac = new Ransac(bUseSampson, nInlierThreshold);
-
     mbIsTheFirstImage = true;
 
     mLastImage = cv::Mat();
 
-    mTrackPub = mTrackerNode.advertise<sensor_msgs::Image>("/rvio/track", 2);
-    mNewerPub = mTrackerNode.advertise<sensor_msgs::Image>("/rvio/newer", 2);
+    mpCornerDetector = new CornerDetector(fsSettings);
+    mpCornerCluster = new CornerCluster(fsSettings);
+    mpRansac = new Ransac(fsSettings);
+
+    mTrackPub = mTrackerNode.advertise<sensor_msgs::Image>("/rvio/track", 1);
+    mNewerPub = mTrackerNode.advertise<sensor_msgs::Image>("/rvio/newer", 1);
 }
 
 
@@ -160,49 +134,6 @@ void Tracker::UndistortAndNormalize(const int N,
 
         dst.push_back(ptUN);
     }
-}
-
-
-void Tracker::GetRotation(Eigen::Matrix3d& R,
-                          Eigen::VectorXd& xkk,
-                          std::list<ImuData*>& plImuData)
-{
-    Eigen::Matrix3d tempR;
-    tempR.setIdentity();
-
-    Eigen::Matrix3d I;
-    I.setIdentity();
-
-    Eigen::Vector3d bg = xkk.block(20,0,3,1);
-
-    for (std::list<ImuData*>::const_iterator lit=plImuData.begin();
-         lit!=plImuData.end(); ++lit)
-    {
-        Eigen::Vector3d wm = (*lit)->AngularVel;
-        double dt = (*lit)->TimeInterval;
-
-        Eigen::Vector3d w = wm-bg;
-
-        bool bIsSmallAngle = false;
-        if (w.norm()<mnSmallAngle)
-            bIsSmallAngle = true;
-
-        double w1 = w.norm();
-        double wdt = w1*dt;
-        Eigen::Matrix3d wx = SkewSymm(w);
-        Eigen::Matrix3d wx2 = wx*wx;
-
-        Eigen::Matrix3d deltaR;
-        if (bIsSmallAngle)
-            deltaR = I-dt*wx+(.5*pow(dt,2))*wx2;
-        else
-            deltaR = I-(sin(wdt)/w1)*wx+((1-cos(wdt))/pow(w1,2))*wx2;
-        assert(std::isnan(deltaR.norm())!=true);
-
-        tempR = deltaR*tempR;
-    }
-
-    R = mRci*tempR*mRic;
 }
 
 
@@ -250,8 +181,7 @@ void Tracker::DisplayNewer(const cv::Mat& imIn,
 }
 
 
-void Tracker::track(cv::Mat& im,
-                    Eigen::VectorXd& xkk,
+void Tracker::track(const cv::Mat& im,
                     std::list<ImuData*>& plImuData)
 {
     // Convert to gray scale
@@ -272,7 +202,7 @@ void Tracker::track(cv::Mat& im,
 
     if (mbEnableEqualizer)
     {
-        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(15,15));
+        cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(5,5));
         clahe->apply(im, im);
     }
 
@@ -336,9 +266,7 @@ void Tracker::track(cv::Mat& im,
         }
 
         // RANSAC
-        Eigen::Matrix3d R;
-        GetRotation(R, xkk, plImuData);
-        mpRansac->FindInliers(mPoints1ForRansac, mPoints2ForRansac, R.transpose(), vInlierFlag);
+        mpRansac->FindInliers(mPoints1ForRansac, mPoints2ForRansac, plImuData, vInlierFlag);
 
         // Show the result in rviz
         cv_bridge::CvImage imTrack;
@@ -377,7 +305,11 @@ void Tracker::track(cv::Mat& im,
 
                 mvlTrackingHistory.at(idx).clear();
             }
-            else
+        }
+
+        for (int i=0; i<mnFeatsToTrack; ++i)
+        {
+            if (vInlierFlag.at(i))
             {
                 // Tracked
                 int idx = mvInlierIndices.at(i);
@@ -416,7 +348,7 @@ void Tracker::track(cv::Mat& im,
 
         if (!mlFreeIndices.empty())
         {
-            // Feature supplement
+            // Feature refill
             std::vector<cv::Point2f> vTempFeats;
             std::vector<cv::Point2f> vNewFeats;
 

@@ -22,9 +22,12 @@
 #define SYSTEM_H
 
 #include <string>
-#include <boost/thread.hpp>
+
+#include <Eigen/Core>
 
 #include <opencv2/core/core.hpp>
+
+#include <boost/thread.hpp>
 
 #include <tf/transform_broadcaster.h>
 
@@ -45,7 +48,9 @@ public:
 
     ~System();
 
-    void MonoVIO(const cv::Mat& im, const double& timestamp, const int& seq);
+    void initialize(const Eigen::Vector3d& w, const Eigen::Vector3d& a, const int nImuData, const bool bEnableAlignment);
+
+    void MonoVIO(const cv::Mat& im, const double& timestamp);
 
     void PushImuData(ImuData* data) { mpSensorDatabase->PushImuData(data); }
 
@@ -55,15 +60,15 @@ private:
 
     double mnImuRate;
     double mnCamTimeOffset;
-    double mnInitTimeLength;
 
     int mnSlidingWindowSize;
     int mnMinCloneStates;
 
     bool mbEnableAlignment;
+    bool mbRecordOutputs;
 
-    bool mbIsInitialized;
     bool mbIsMoving;
+    bool mbIsReady;
 
     double mnThresholdAngle;
     double mnThresholdDispl;
@@ -71,10 +76,10 @@ private:
     // Gravity
     double mnGravity;
 
-    // Sigma{g,a,wg,wa}
+    // Sigma{g,wg,a,wa}
     double msigmaGyroNoise;
-    double msigmaAccelNoise;
     double msigmaGyroBias;
+    double msigmaAccelNoise;
     double msigmaAccelBias;
 
     // State and covariance
@@ -93,6 +98,6 @@ private:
     tf::TransformBroadcaster mTfPub;
 };
 
-}// namespace RVIO
+} // namespace RVIO
 
 #endif

@@ -1,7 +1,7 @@
 %YAML:1.0
 
 #--------------------------------------------------------------------------------------------
-# IMU Parameters.
+# IMU Parameters (fixed).
 #--------------------------------------------------------------------------------------------
 
 # IMU data rate
@@ -20,7 +20,7 @@ IMU.sigma_wa: 3.0000e-3
 IMU.nG: 9.8082
 
 #--------------------------------------------------------------------------------------------
-# Camera Parameters.
+# Camera Parameters (fixed).
 #--------------------------------------------------------------------------------------------
 
 # Camera frame rate
@@ -62,7 +62,7 @@ Camera.T_BC0: !!opencv-matrix
             0.0, 0.0, 0.0, 1.0]
 
 # Timeshift of camera to IMU [s] (t_imu=t_cam+shift)
-Camera:nTimeOffset: 0
+Camera.nTimeOffset: 0
 
 #--------------------------------------------------------------------------------------------
 # Tracker Parameters (tunable).
@@ -72,13 +72,13 @@ Camera:nTimeOffset: 0
 Tracker.nFeatures: 200
 
 # Max. tracking length
-Tracker.nMaxTrackingLength: 15
+Tracker.nMaxTrackingLength: 15 # 10 # 5
 
 # Min. tracking length
 Tracker.nMinTrackingLength: 3
 
 # Min. distance between features
-Tracker.nMinDist: 15
+Tracker.nMinDist: 10
 
 # Quality level of features
 Tracker.nQualLvl: 0.01
@@ -92,22 +92,22 @@ Tracker.EnableEqualizer: 1
 # Use Sampson error or not (RANSAC)
 Tracker.UseSampson: 1
 
-# Threshold for inlier (RANSAC)
-Tracker.nSampsonThrd: 1e-4
+# Error threshold for inlier (RANSAC)
+Tracker.nInlierThrd: 1e-4
 
 #--------------------------------------------------------------------------------------------
 # Initialization Parameters (tunable).
 #--------------------------------------------------------------------------------------------
 
-# Use initial alignment or not
-INI.EnableAlignment: 1
-
-# Time length of initialization [s]
-INI.nTimeLength: 1
-
 # Thresholds for moving detection [rad,m]
 INI.nThresholdAngle: 0.005
-INI.nThresholdDispl: 0.005
+INI.nThresholdDispl: 0.01
+
+# Use gravity alignment or not
+INI.EnableAlignment: 1
+
+# Record the outputs or not
+INI.RecordOutputs: 0
 
 #--------------------------------------------------------------------------------------------
 # Display Parameters (tunable).
